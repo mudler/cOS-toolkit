@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/bash -x
 set -e
 
 PROG=$0
@@ -381,6 +381,11 @@ umount_target 2>/dev/null
 
 prepare_recovery
 prepare_passive
+
+losetup -f --show $RECOVERYDIR/cOS/recovery.img
+losetup -f --show ${STATEDIR}/cOS/passive.img
+sleep 5
+blkid
 
 if [ -n "$INTERACTIVE" ]; then
     exit 0
