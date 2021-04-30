@@ -119,7 +119,7 @@ jobs:
     - name: Install deps
       run: |
         sudo apt-get update
-        sudo apt-get install -y xorriso squashfs-tools dosfstools
+        sudo apt-get install -y xorriso squashfs-tools
         sudo -E make deps
 
     - name: Build ISO from local build 🔧
@@ -145,12 +145,6 @@ jobs:
           *.iso
           *.sha256
         if-no-files-found: error
-    - uses: actions/upload-artifact@v2
-      if: always()
-      with:
-        name: luet-build-${{ matrix.flavor }}.log
-        path: isowork/*.log
-        if-no-files-found: warn
 
   qemu:
       runs-on: ubuntu-latest
