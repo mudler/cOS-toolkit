@@ -34,11 +34,14 @@
 
 
 
-name: Build cOS nightly
+name: Build cOS master
 
 on: 
- schedule:
-   - cron: 0 20 * * *
+ push:
+   branches:
+     - release_pipeline
+   tags:
+     - v*
 
 
 concurrency:
@@ -82,10 +85,10 @@ jobs:
     runs-on: ubuntu-latest
     env:
       FLAVOR: opensuse
-      FINAL_REPO: quay.io/costoolkit/releases-opensuse
+      FINAL_REPO: quay.io/mudler/cos-tests-opensuse
       DOWNLOAD_METADATA: false
-      PUSH_CACHE: false
-      REPO_CACHE: quay.io/costoolkit/build-opensuse-cache
+      PUSH_CACHE: true
+      REPO_CACHE: quay.io/mudler/cos-tests-build-opensuse-cache
     steps:
       
   
@@ -104,6 +107,8 @@ jobs:
           sudo rm -rf /usr/local/lib/android # will release about 10 GB if you don't need Android
           sudo rm -rf /usr/share/dotnet # will release about 20GB if you don't need .NET
 
+      - name: Login to Quay Registry
+        run: echo ${{ secrets.QUAY_PASSWORD }} | docker login -u ${{ secrets.QUAY_USERNAME }} --password-stdin quay.io
       
   
   
@@ -129,6 +134,19 @@ jobs:
           ./.github/build
           ls -liah $PWD/build
           sudo chmod -R 777 $PWD/build
+      - name: Generate manifests
+        run: |
+          for f in build/*tar*; do
+            [ -e "$f" ] || continue
+            sudo -E luet mtree -- generate $f -o "$f.mtree"
+          done
+      - name: Append manifests to metadata
+        run: |
+          for f in build/*mtree; do
+            [ -e "$f" ] || continue
+            BASE_NAME=`basename -s .package.tar.zst.mtree $f`
+            sudo -E .github/append_manifests.py build/$BASE_NAME.metadata.yaml $f mtree
+          done
       
   
   
@@ -152,7 +170,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: build-opensuse
     env:
-      FINAL_REPO: quay.io/costoolkit/releases-opensuse
+      FINAL_REPO: quay.io/mudler/cos-tests-opensuse
     steps:
       
   
@@ -285,52 +303,6 @@ jobs:
             packer/*.box
           if-no-files-found: error
 
-  
-  
-  
-  
-  tests-squashfs-opensuse:
-    env:
-      VAGRANT_CPU: 3
-      VAGRANT_MEMORY: 10240
-    runs-on: macos-10.15
-    needs: vbox-squashfs-opensuse
-    strategy:
-      matrix:
-        test: ["test-features", "test-smoke", "test-fallback", "test-recovery", "test-upgrades-images-signed", "test-upgrades-images-unsigned", "test-upgrades-local", "test-deploys-images"]
-    steps:
-      - name: Install Go
-        uses: actions/setup-go@v2
-      - uses: actions/checkout@v2
-      - name: Download vagrant box
-        uses: actions/download-artifact@v2
-        with:
-          name: cOS-squashfs-opensuse-vbox.box
-          path: packer
-
-      - name: Run tests 🔧
-        run: |
-          export GOPATH="/Users/runner/go"
-          go get -u github.com/onsi/ginkgo/ginkgo
-          go get -u github.com/onsi/gomega/...
-          PATH=$PATH:$GOPATH/bin
-          make test-clean
-          make vagrantfile
-          make prepare-test
-          make ${{ matrix.test }}
-      - uses: actions/upload-artifact@v2
-        if: failure() && contains(matrix.test, 'upgrade')
-        with:
-          name: cOS-squashfs-${{ matrix.test }}.logs.zip
-          path: tests/**/logs/*
-          if-no-files-found: warn
-      - uses: actions/upload-artifact@v2
-        if: failure()
-        with:
-          name: cOS-squashfs-${{ matrix.test }}.serial.zip
-          path: tests/serial_port1
-          if-no-files-found: warn
-
     
   
   
@@ -340,7 +312,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: build-opensuse
     env:
-      FINAL_REPO: quay.io/costoolkit/releases-opensuse
+      FINAL_REPO: quay.io/mudler/cos-tests-opensuse
     steps:
       
   
@@ -480,48 +452,120 @@ jobs:
   
   
   
-  
-  tests-nonsquashfs-opensuse:
+  publish-opensuse:
+    runs-on: ubuntu-latest
+    needs: 
+    - build-opensuse
+    - iso-squashfs-opensuse
     env:
-      VAGRANT_CPU: 3
-      VAGRANT_MEMORY: 10240
-    runs-on: macos-10.15
-    needs: vbox-nonsquashfs-opensuse
-    strategy:
-      matrix:
-        test: ["test-features", "test-smoke", "test-fallback", "test-recovery", "test-upgrades-images-signed", "test-upgrades-images-unsigned", "test-upgrades-local", "test-deploys-images"]
+      FLAVOR: opensuse
+      FINAL_REPO: quay.io/mudler/cos-tests-opensuse
+      DOWNLOAD_METADATA: true
+      DOWNLOAD_ONLY: true
     steps:
+      
+  
+      - uses: actions/checkout@v2
+      - run: |
+          git fetch --prune --unshallow
+      - name: setup-docker
+        uses: docker-practice/actions-setup-docker@master
+      - name: Release space from worker
+        run: |
+          sudo rm -rf /usr/local/lib/android # will release about 10 GB if you don't need Android
+          sudo rm -rf /usr/share/dotnet # will release about 20GB if you don't need .NET
+
+      - name: Download result for build
+        uses: actions/download-artifact@v2
+        with:
+          name: build-opensuse
+          path: build
+      - name: Login to Quay Registry
+        run: echo ${{ secrets.QUAY_PASSWORD }} | docker login -u ${{ secrets.QUAY_USERNAME }} --password-stdin quay.io
+      
+  
+  
+      - name: Run make deps
+        run: |
+          sudo -E make deps
+          sudo luet install -y toolchain/yq
+
       - name: Install Go
         uses: actions/setup-go@v2
+      - name: Grab metadata from remotes
+        run: |
+          export PATH=$PATH:/usr/local/go/bin
+          pushd ./.github
+          go build -o build
+          popd
+          sudo -E ./.github/build
+          ls -liah $PWD/build
+      - name: Publish to DockerHub 🚀
+        run: |
+          sudo -E make publish-repo
+
+  
+  
+  
+
+  github-release-opensuse:
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    needs: 
+    - build-opensuse
+    - raw-images-opensuse
+    - vbox-nonsquashfs-opensuse
+    - qemu-nonsquashfs-opensuse
+    - iso-nonsquashfs-opensuse
+    steps:
       - uses: actions/checkout@v2
+      
+      - name: Export cos version
+        run: |
+             source .github/helpers.sh
+             echo "COS_VERSION=$(cos_version)" >> $GITHUB_ENV
+
+      - name: Download ISO
+        uses: actions/download-artifact@v2
+        with:
+          name: cOS-nonsquashfs-opensuse.iso.zip
+          path: release
       - name: Download vagrant box
         uses: actions/download-artifact@v2
         with:
           name: cOS-nonsquashfs-opensuse-vbox.box
-          path: packer
-
-      - name: Run tests 🔧
-        run: |
-          export GOPATH="/Users/runner/go"
-          go get -u github.com/onsi/ginkgo/ginkgo
-          go get -u github.com/onsi/gomega/...
-          PATH=$PATH:$GOPATH/bin
-          make test-clean
-          make vagrantfile
-          make prepare-test
-          make ${{ matrix.test }}
-      - uses: actions/upload-artifact@v2
-        if: failure() && contains(matrix.test, 'upgrade')
+          path: release
+      - name: Download OVA image
+        uses: actions/download-artifact@v2
         with:
-          name: cOS-nonsquashfs-${{ matrix.test }}.logs.zip
-          path: tests/**/logs/*
-          if-no-files-found: warn
-      - uses: actions/upload-artifact@v2
-        if: failure()
+          name: cOS-nonsquashfs-opensuse.ova
+          path: release
+      - name: Download QCOW image
+        uses: actions/download-artifact@v2
         with:
-          name: cOS-nonsquashfs-${{ matrix.test }}.serial.zip
-          path: tests/serial_port1
-          if-no-files-found: warn
+          name: cOS-nonsquashfs-opensuse.qcow
+          path: release
+      - name: Download GCE RAW image
+        uses: actions/download-artifact@v2
+        with:
+          name: cOS-Vanilla-GCE-opensuse-${{ env.COS_VERSION }}
+          path: release
+      - name: Download AZURE RAW image
+        uses: actions/download-artifact@v2
+        with:
+          name: cOS-Vanilla-AZURE-opensuse-${{ env.COS_VERSION }}
+          path: release
+      - name: Download RAW image
+        uses: actions/download-artifact@v2
+        with:
+          name: cOS-Vanilla-RAW-opensuse-${{ env.COS_VERSION }}
+          path: release
+      - name: Release
+        uses: fnkr/github-action-ghr@v1
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GHR_PATH: release/
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   
   
@@ -605,201 +649,3 @@ jobs:
             cOS-Vanilla-AZURE-opensuse-${{ env.COS_VERSION }}-g${{ github.sha }}.tar.gz
           if-no-files-found: error
 
-  
-
-  
-  
-  
-  docker-build-fedora:
-    runs-on: ubuntu-latest
-  
-    env:
-      FLAVOR: fedora
-    steps:
-      
-  
-      - uses: actions/checkout@v2
-      - run: |
-          git fetch --prune --unshallow
-      - name: setup-docker
-        uses: docker-practice/actions-setup-docker@master
-      - name: Release space from worker
-        run: |
-          sudo rm -rf /usr/local/lib/android # will release about 10 GB if you don't need Android
-          sudo rm -rf /usr/share/dotnet # will release about 20GB if you don't need .NET
-
-      - name: Build  🔧
-        shell: 'script -q -e -c "bash {0}"'
-        run: |
-          source .envrc
-          cos-build $FLAVOR
-
-  
-  
-  
-  build-fedora:
-    runs-on: ubuntu-latest
-    env:
-      FLAVOR: fedora
-      FINAL_REPO: quay.io/costoolkit/releases-fedora
-      DOWNLOAD_METADATA: false
-      PUSH_CACHE: false
-      REPO_CACHE: quay.io/costoolkit/build-fedora-cache
-    steps:
-      
-  
-      - name: Install Go
-        uses: actions/setup-go@v2
-
-      
-  
-      - uses: actions/checkout@v2
-      - run: |
-          git fetch --prune --unshallow
-      - name: setup-docker
-        uses: docker-practice/actions-setup-docker@master
-      - name: Release space from worker
-        run: |
-          sudo rm -rf /usr/local/lib/android # will release about 10 GB if you don't need Android
-          sudo rm -rf /usr/share/dotnet # will release about 20GB if you don't need .NET
-
-      
-  
-  
-      - name: Run make deps
-        run: |
-          sudo -E make deps
-          sudo luet install -y toolchain/yq
-
-      
-  
-  
-      - name: Run make validate
-        run: |
-          sudo -E make validate
-
-      - name: Build packages 🔧
-        run: |
-          export PATH=$PATH:/usr/local/go/bin
-          mkdir build || true
-          pushd ./.github
-          go build -o build
-          popd
-          ./.github/build
-          ls -liah $PWD/build
-          sudo chmod -R 777 $PWD/build
-      
-  
-  
-      - name: Run make create-repo
-        run: |
-          sudo -E make create-repo
-
-      - name: Upload results
-        uses: actions/upload-artifact@v2
-        with:
-          name: build-fedora
-          path: build
-          if-no-files-found: error
-
-    
-    
-  
-
-  
-  
-  
-  docker-build-ubuntu:
-    runs-on: ubuntu-latest
-  
-    env:
-      FLAVOR: ubuntu
-    steps:
-      
-  
-      - uses: actions/checkout@v2
-      - run: |
-          git fetch --prune --unshallow
-      - name: setup-docker
-        uses: docker-practice/actions-setup-docker@master
-      - name: Release space from worker
-        run: |
-          sudo rm -rf /usr/local/lib/android # will release about 10 GB if you don't need Android
-          sudo rm -rf /usr/share/dotnet # will release about 20GB if you don't need .NET
-
-      - name: Build  🔧
-        shell: 'script -q -e -c "bash {0}"'
-        run: |
-          source .envrc
-          cos-build $FLAVOR
-
-  
-  
-  
-  build-ubuntu:
-    runs-on: ubuntu-latest
-    env:
-      FLAVOR: ubuntu
-      FINAL_REPO: quay.io/costoolkit/releases-ubuntu
-      DOWNLOAD_METADATA: false
-      PUSH_CACHE: false
-      REPO_CACHE: quay.io/costoolkit/build-ubuntu-cache
-    steps:
-      
-  
-      - name: Install Go
-        uses: actions/setup-go@v2
-
-      
-  
-      - uses: actions/checkout@v2
-      - run: |
-          git fetch --prune --unshallow
-      - name: setup-docker
-        uses: docker-practice/actions-setup-docker@master
-      - name: Release space from worker
-        run: |
-          sudo rm -rf /usr/local/lib/android # will release about 10 GB if you don't need Android
-          sudo rm -rf /usr/share/dotnet # will release about 20GB if you don't need .NET
-
-      
-  
-  
-      - name: Run make deps
-        run: |
-          sudo -E make deps
-          sudo luet install -y toolchain/yq
-
-      
-  
-  
-      - name: Run make validate
-        run: |
-          sudo -E make validate
-
-      - name: Build packages 🔧
-        run: |
-          export PATH=$PATH:/usr/local/go/bin
-          mkdir build || true
-          pushd ./.github
-          go build -o build
-          popd
-          ./.github/build
-          ls -liah $PWD/build
-          sudo chmod -R 777 $PWD/build
-      
-  
-  
-      - name: Run make create-repo
-        run: |
-          sudo -E make create-repo
-
-      - name: Upload results
-        uses: actions/upload-artifact@v2
-        with:
-          name: build-ubuntu
-          path: build
-          if-no-files-found: error
-
-    
-    
