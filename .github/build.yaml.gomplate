@@ -1,35 +1,16 @@
 {{{ $config := (datasource "config") }}}
-name: Build cOS {{{$config.pipeline}}}
 
-on: 
-{{{$config.on | toYAML | indent 1 }}}
+{{{define "cos_version" }}}
+      - name: Export cos version
+        run: |
+             source .github/helpers.sh
+             echo "COS_VERSION=$(cos_version)" >> $GITHUB_ENV
+{{{ end }}}
 
-concurrency:
-  group: ci-${{ github.head_ref || github.ref }}-${{ github.repository }}
-  cancel-in-progress: true
 
-jobs:
-
-{{{- range $config.flavors }}}
-  {{{$flavor:=.}}}
-  docker-build-{{{ $flavor }}}:
-  {{{- if $config.local_runner }}}
-    runs-on: self-hosted
-    if: contains(["mudler", "davidcassany", "itxaka", kkaempf", "cOS-cibot"], "${{ github.actor }}") || contains(github.event.pull_request.labels.*.name, 'safe to test')
-  {{{- else }}}
-    runs-on: ubuntu-latest
-  {{{ end }}}
-    env:
-      FLAVOR: {{{ $flavor }}}
-
-    steps:
-  {{{- if $config.local_runner }}}
-      - run: |
-          sudo rm -rf build || true
-          sudo rm -rf bin || true
-  {{{- end }}}
+{{{define "prepare_worker" }}}
+  {{{ $config := (datasource "config") }}}
       - uses: actions/checkout@v2
-
       - run: |
           git fetch --prune --unshallow
   {{{- if not $config.local_runner }}}
@@ -40,26 +21,10 @@ jobs:
           sudo rm -rf /usr/local/lib/android # will release about 10 GB if you don't need Android
           sudo rm -rf /usr/share/dotnet # will release about 20GB if you don't need .NET
   {{{- end }}}
-      - name: Build  🔧
-        shell: 'script -q -e -c "bash {0}"'
-        run: |
-          source .envrc
-          cos-build $FLAVOR
+{{{ end }}}
 
-
-  build-{{{ $flavor }}}:
-  {{{- if $config.local_runner }}}
-    runs-on: self-hosted
-    if: contains(["mudler", "davidcassany", "itxaka", kkaempf", "cOS-cibot"], "${{ github.actor }}")
-  {{{- else }}}
-    runs-on: ubuntu-latest
-  {{{- end }}}
-    env:
-      FLAVOR: {{{ $flavor }}}
-      FINAL_REPO: quay.io/costoolkit/{{{$config.repository}}}-{{{ $flavor }}}
-      DOWNLOAD_METADATA: false
-      PUSH_CACHE: {{{$config.push_cache}}}
-    steps:
+{{{define "prepare_build" }}}
+  {{{ $config := (datasource "config") }}}
   {{{- if $config.local_runner }}}
       - run: |
           sudo rm -rf build || true
@@ -75,39 +40,73 @@ jobs:
       - name: Install Go
         uses: actions/setup-go@v2
   {{{- end }}}
-
-      - uses: actions/checkout@v2
-
-      - run: |
-          git fetch --prune --unshallow
-
   {{{- if $config.local_runner }}}
       - name: Install make
         run: |
             sudo apt-get update
             sudo apt-get install -y make
-  {{{- else }}}
-      - name: setup-docker
-        uses: docker-practice/actions-setup-docker@master
-      - name: Release space from worker
-        run: |
-          sudo rm -rf /usr/local/lib/android # will release about 10 GB if you don't need Android
-          sudo rm -rf /usr/share/dotnet # will release about 20GB if you don't need .NET
   {{{- end }}}
+{{{ end }}}
 
+{{{define "make"}}}
+  {{{ $config := (datasource "config") }}}
+  {{{ $target := . }}}
+      - name: Run make {{{ $target }}}
+        run: |
+          sudo -E make {{{ $target }}}
+{{{end}}}
+
+{{{define "docker_build_packages"}}}
+  {{{ $config := (datasource "config") }}}
+  {{{ $flavor := . }}}
+  docker-build-{{{ $flavor }}}:
+  {{{- if $config.local_runner }}}
+    runs-on: self-hosted
+    if: contains(["mudler", "davidcassany", "itxaka", kkaempf", "cOS-cibot"], "${{ github.actor }}") || contains(github.event.pull_request.labels.*.name, 'safe to test')
+  {{{- else }}}
+    runs-on: ubuntu-latest
+  {{{ end }}}
+    env:
+      FLAVOR: {{{ $flavor }}}
+    steps:
+  {{{- if $config.local_runner }}}
+      - run: |
+          sudo rm -rf build || true
+          sudo rm -rf bin || true
+  {{{- end }}}
+      {{{ tmpl.Exec "prepare_worker" }}}
+      - name: Build  🔧
+        shell: 'script -q -e -c "bash {0}"'
+        run: |
+          source .envrc
+          cos-build $FLAVOR
+{{{end}}}
+
+{{{define "build_packages"}}}
+  {{{ $config := (datasource "config") }}}
+  {{{ $flavor := . }}}
+  build-{{{ $flavor }}}:
+  {{{- if $config.local_runner }}}
+    runs-on: self-hosted
+    if: contains(["mudler", "davidcassany", "itxaka", kkaempf", "cOS-cibot"], "${{ github.actor }}")
+  {{{- else }}}
+    runs-on: ubuntu-latest
+  {{{- end }}}
+    env:
+      FLAVOR: {{{ $flavor }}}
+      FINAL_REPO: quay.io/costoolkit/{{{$config.repository}}}-{{{ $flavor }}}
+      DOWNLOAD_METADATA: false
+      PUSH_CACHE: {{{$config.push_cache}}}
+    steps:
+
+      {{{ tmpl.Exec "prepare_build" }}}
+      {{{ tmpl.Exec "prepare_worker" }}}
   {{{- if or $config.publishing_pipeline $config.push_cache }}}
       - name: Login to Quay Registry
         run: echo ${{ secrets.QUAY_PASSWORD }} | docker login -u ${{ secrets.QUAY_USERNAME }} --password-stdin quay.io
   {{{- end }}}
-
-      - name: Install deps
-        run: |
-          sudo -E make deps
-
-      - name: Validate 🌳
-        run: |
-          make validate
-
+      {{{ tmpl.Exec "make" "deps" }}}
+      {{{ tmpl.Exec "make" "validate" }}}
       - name: Build packages 🔧
         run: |
           export PATH=$PATH:/usr/local/go/bin
@@ -133,22 +132,19 @@ jobs:
             sudo -E .github/append_manifests.py build/$BASE_NAME.metadata.yaml $f mtree
           done
   {{{- end }}}
-      - name: Create repo
-        run: |
-          sudo -E make create-repo
+      {{{ tmpl.Exec "make" "create-repo" }}}
       - name: Upload results
         uses: actions/upload-artifact@v2
         with:
           name: build-{{{ $flavor }}}
           path: build
           if-no-files-found: error
+{{{end}}}
 
-
-
-  {{{- range slice "squashfs" "nonsquashfs" }}}
-  {{{- $subset:=.}}}
-  {{{- if not (has $config.skip_images_flavor $flavor) }}}
-
+{{{define "build_iso"}}}
+  {{{ $config := (datasource "config") }}}
+  {{{ $flavor := index . "flavor" }}}
+  {{{ $subset := index . "subset" }}}
   iso-{{{$subset}}}-{{{ $flavor }}}:
   {{{- if $config.local_runner }}}
     runs-on: self-hosted
@@ -160,7 +156,7 @@ jobs:
     env:
       FINAL_REPO: quay.io/costoolkit/{{{$config.repository}}}-{{{ $flavor }}}
     steps:
-      - uses: actions/checkout@v2
+      {{{ tmpl.Exec "prepare_worker" }}}
       - name: Download result for build
         uses: actions/download-artifact@v2
         with:
@@ -170,24 +166,22 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y xorriso squashfs-tools
-          sudo -E make deps
+      {{{ tmpl.Exec "make" "deps" }}}
   {{{- if eq $subset "nonsquashfs" }}}
       - name: Tweak manifest and drop squashfs recovery
         run: |
           yq d -i manifest.yaml 'packages.isoimage(.==recovery/cos-img)'
   {{{- end }}}
+      {{{ tmpl.Exec "cos_version" }}}
       - name: Build ISO from local build 🔧
         if: github.event_name != 'schedule' && !startsWith(github.ref, 'refs/tags/')
         run: |
           source .github/helpers.sh
           create_remote_manifest manifest.yaml
-          COS_VERSION=$(cos_version)
           sudo -E MAKEISO_ARGS="--output cOS-$COS_VERSION" MANIFEST=manifest.yaml.remote make local-iso
       - name: Build ISO from remote repositories 🔧
         if: github.event_name == 'schedule' || startsWith(github.ref, 'refs/tags/')
         run: |
-          source .github/helpers.sh
-          COS_VERSION=$(cos_version)
           sudo -E MAKEISO_ARGS="--output cOS-$COS_VERSION" make iso
       - uses: actions/upload-artifact@v2
         with:
@@ -196,6 +190,13 @@ jobs:
             *.iso
             *.sha256
           if-no-files-found: error
+{{{ end }}}
+
+
+{{{define "build_qemu"}}}
+  {{{ $config := (datasource "config") }}}
+  {{{ $flavor := index . "flavor" }}}
+  {{{ $subset := index . "subset" }}}
   qemu-{{{$subset}}}-{{{ $flavor }}}:
     runs-on: macos-10.15
     needs: iso-{{{$subset}}}-{{{ $flavor }}}
@@ -223,6 +224,12 @@ jobs:
           path: |
             packer/*.box
           if-no-files-found: error
+{{{ end }}}
+
+{{{define "build_vbox"}}}
+  {{{ $config := (datasource "config") }}}
+  {{{ $flavor := index . "flavor" }}}
+  {{{ $subset := index . "subset" }}}
   vbox-{{{$subset}}}-{{{ $flavor }}}:
     runs-on: macos-10.15
     needs: iso-{{{$subset}}}-{{{ $flavor }}}
@@ -252,8 +259,12 @@ jobs:
           path: |
             packer/*.box
           if-no-files-found: error
-  {{{- end }}}
-  {{{- if not (or $config.skip_tests (has $config.skip_tests_flavor $flavor)) }}}
+{{{ end }}}
+
+{{{define "test"}}}
+  {{{ $config := (datasource "config") }}}
+  {{{ $flavor := index . "flavor" }}}
+  {{{ $subset := index . "subset" }}}
   tests-{{{$subset}}}-{{{ $flavor }}}:
     env:
       VAGRANT_CPU: 3
@@ -295,11 +306,11 @@ jobs:
           name: cOS-{{{$subset}}}-${{ matrix.test }}.serial.zip
           path: tests/serial_port1
           if-no-files-found: warn
+{{{ end }}}
 
-  {{{- end}}}
- {{{- end}}}
-
-  {{{- if $config.publishing_pipeline }}}
+{{{define "publish_packages"}}}
+  {{{ $config := (datasource "config") }}}
+  {{{ $flavor := . }}}
   publish-{{{ $flavor }}}:
     runs-on: ubuntu-latest
     {{{- if or $config.skip_tests (has $config.skip_tests_flavor $flavor) }}}
@@ -313,36 +324,17 @@ jobs:
       DOWNLOAD_METADATA: true
       DOWNLOAD_ONLY: true
     steps:
-      - uses: actions/checkout@v2
+      {{{ tmpl.Exec "prepare_worker" }}}
       - name: Download result for build
         uses: actions/download-artifact@v2
         with:
           name: build-{{{ $flavor }}}
           path: build
-      - run: |
-          git fetch --prune --unshallow
-
-      - name: setup-docker
-        uses: docker-practice/actions-setup-docker@master
-
-      # We patch docker to use all the HD available in GH action free runners
-      - name: Patch Docker Daemon data-root
-        run: |
-          DOCKER_DATA_ROOT='/mnt/var/lib/docker'
-          DOCKER_DAEMON_JSON='/etc/docker/daemon.json'
-          sudo mkdir -p "${DOCKER_DATA_ROOT}"
-          jq --arg dataroot "${DOCKER_DATA_ROOT}" '. + {"data-root": $dataroot}' "${DOCKER_DAEMON_JSON}" > "/tmp/docker.json.tmp"
-          sudo mv "/tmp/docker.json.tmp" "${DOCKER_DAEMON_JSON}"
-          sudo systemctl restart docker
-
     {{{- if or $config.publishing_pipeline $config.push_cache }}}
       - name: Login to Quay Registry
         run: echo ${{ secrets.QUAY_PASSWORD }} | docker login -u ${{ secrets.QUAY_USERNAME }} --password-stdin quay.io
     {{{- end }}}
-
-      - name: Install deps
-        run: |
-          sudo -E make deps
+      {{{ tmpl.Exec "make" "deps" }}}
     {{{- if $config.local_runner }}}
       - name: Install Go
         run: |
@@ -363,6 +355,13 @@ jobs:
       - name: Publish to DockerHub 🚀
         run: |
           sudo -E make publish-repo
+{{{ end }}}
+
+
+
+{{{define "github_release"}}}
+  {{{ $config := (datasource "config") }}}
+  {{{ $flavor := . }}}
 
   github-release-{{{ $flavor }}}:
     if: startsWith(github.ref, 'refs/tags/')
@@ -374,10 +373,7 @@ jobs:
     {{{- end }}}
     steps:
       - uses: actions/checkout@v2
-      - name: Export cos version
-        run: |
-             source .github/helpers.sh
-             echo "COS_VERSION=$(cos_version)" >> $GITHUB_ENV
+      {{{ tmpl.Exec "cos_version" }}}
       - name: Download ISO
         uses: actions/download-artifact@v2
         with:
@@ -419,10 +415,11 @@ jobs:
         env:
           GHR_PATH: release/
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-  {{{- end }}}
+{{{ end }}}
 
-  {{{- if not (has $config.skip_images_flavor $flavor) }}}
-
+{{{define "raw_image"}}}
+  {{{ $config := (datasource "config") }}}
+  {{{ $flavor := . }}}
   raw-images-{{{ $flavor }}}:
     runs-on: ubuntu-latest
     container: opensuse/leap:15.3
@@ -443,19 +440,11 @@ jobs:
           # Since some time /var/lock is a symlink to /run/lock, which doesn't exit in the continer
           rm -rf /var/lock
           mkdir -p /var/lock
-          make deps
-      - name: Export cos version
-        run: |
-          echo "COS_VERSION=$(yq r packages/cos/collection.yaml 'packages.[0].version')" >> $GITHUB_ENV
-      - name: Build raw image
-        run: |
-          make raw_disk
-      - name: Build Azure image
-        run: |
-          make azure_disk
-      - name: Build GCE image
-        run: |
-          make gce_disk
+      {{{ tmpl.Exec "make" "deps" }}}
+      {{{ tmpl.Exec "cos_version" }}}
+      {{{ tmpl.Exec "make" "raw_disk" }}}
+      {{{ tmpl.Exec "make" "azure_disk" }}}
+      {{{ tmpl.Exec "make" "gce_disk" }}}
       - name: Rename images
         run: |
           mv disk.raw cOS-Vanilla-RAW-${{ env.COS_VERSION }}-{{{ $flavor }}}-${{ github.sha }}.raw
@@ -479,9 +468,11 @@ jobs:
           path: |
             cOS-Vanilla-AZURE-${{ env.COS_VERSION }}-{{{ $flavor }}}-${{ github.sha }}.tar.gz
           if-no-files-found: error
+{{{ end }}}
 
-    {{{- if $config.publishing_pipeline }}}
-
+{{{define "ami_publish"}}}
+  {{{ $config := (datasource "config") }}}
+  {{{ $flavor := . }}}
   ami-publish-{{{ $flavor }}}:
     runs-on: ubuntu-latest
     needs: publish-vanilla-ami
@@ -491,23 +482,20 @@ jobs:
       AWS_DEFAULT_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
     steps:
       - uses: actions/checkout@v2
-      - name: Install deps
-        run: |
-          sudo -E make deps
+      {{{ tmpl.Exec "make" "deps" }}}
+      {{{ tmpl.Exec "cos_version" }}}
       - name: Build AMI for {{{ $flavor }}}
         run: |
-            COS_VERSION=$(yq r packages/cos/collection.yaml 'packages.[0].version')
             export COS_VERSION="${COS_VERSION/+/-}"
             export PKR_VAR_cos_version="${COS_VERSION}"
             export PKR_VAR_cos_deploy_args="cos-deploy {{{ if (ne $flavor "opensuse") }}}--no-verify {{{ end }}}--docker-image quay.io/costoolkit/{{{$config.repository}}}-{{{ $flavor }}}:cos-system-${COS_VERSION}"
             export PKR_VAR_flavor={{{ $flavor }}}
             export PKR_VAR_git_sha="${GITHUB_SHA}"
             make packer-aws
-    {{{- end }}}
-  {{{- end }}}
-{{{- end }}}
+{{{ end }}}
 
-{{{- if eq $config.pipeline "master" }}}
+{{{define "publish_vanilla"}}}
+  {{{ $config := (datasource "config") }}}
   # We need only a single vanilla image for any OS
   # Vanilla image is always based on openSUSE
   publish-vanilla-ami:
@@ -516,12 +504,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v2
-      - name: Install deps
-        run: |
-          sudo -E make deps
-      - name: Export cOS version
-        run: |
-          echo "COS_VERSION=$(yq r packages/cos/collection.yaml 'packages.[0].version')" >> $GITHUB_ENV
+      {{{ tmpl.Exec "make" "deps" }}}
+      {{{ tmpl.Exec "cos_version" }}}
       - name: Download result for build
         uses: actions/download-artifact@v2
         with:
@@ -538,4 +522,56 @@ jobs:
           export github_sha="${GITHUB_SHA}"
           export COPY_AMI_ALL_REGIONS="true"
           make aws_vanilla_ami
+{{{ end }}}
+
+name: Build cOS {{{$config.pipeline}}}
+
+on: 
+{{{$config.on | toYAML | indent 1 }}}
+
+concurrency:
+  group: ci-${{ github.head_ref || github.ref }}-${{ github.repository }}
+  cancel-in-progress: true
+
+jobs:
+
+{{{- range $config.flavors }}}
+  {{{$flavor:=.}}}
+
+  {{{tmpl.Exec "docker_build_packages" $flavor}}}
+  {{{tmpl.Exec "build_packages" $flavor}}}
+
+  {{{- range slice "squashfs" "nonsquashfs" }}}
+
+    {{{- $subset:=. }}}
+    {{{ $context := coll.Dict "flavor" $flavor "subset" $subset }}}
+
+    {{{- if not (has $config.skip_images_flavor $flavor) }}}
+  {{{ tmpl.Exec "build_iso" $context }}}
+  {{{ tmpl.Exec "build_qemu" $context }}}
+  {{{ tmpl.Exec "build_vbox" $context }}}
+    {{{- end }}}
+
+    {{{- if not (or $config.skip_tests (has $config.skip_tests_flavor $flavor)) }}}
+  {{{ tmpl.Exec "test" $context }}}
+    {{{- end}}}
+
+  {{{- end}}}
+
+  {{{- if $config.publishing_pipeline }}}
+  {{{tmpl.Exec "publish_packages" $flavor}}}
+  {{{tmpl.Exec "github_release" $flavor}}}
+  {{{- end }}}
+
+    {{{- if not (has $config.skip_images_flavor $flavor) }}}
+  {{{tmpl.Exec "raw_image" $flavor}}}
+
+      {{{- if $config.publishing_pipeline }}}
+  {{{tmpl.Exec "ami_publish" $flavor}}}
+      {{{- end }}}
+    {{{- end }}}
+{{{- end }}}
+
+{{{- if eq $config.pipeline "master" }}}
+{{{tmpl.Exec "publish_vanilla"}}}
 {{{- end }}}

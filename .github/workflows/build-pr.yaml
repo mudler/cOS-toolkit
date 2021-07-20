@@ -1,4 +1,39 @@
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 name: Build cOS Pull requests
 
 on: 
@@ -18,15 +53,19 @@ concurrency:
 
 jobs:
   
+
+  
+  
+  
   docker-build-opensuse:
     runs-on: ubuntu-latest
   
     env:
       FLAVOR: opensuse
-
     steps:
+      
+  
       - uses: actions/checkout@v2
-
       - run: |
           git fetch --prune --unshallow
       - name: setup-docker
@@ -35,13 +74,16 @@ jobs:
         run: |
           sudo rm -rf /usr/local/lib/android # will release about 10 GB if you don't need Android
           sudo rm -rf /usr/share/dotnet # will release about 20GB if you don't need .NET
+
       - name: Build  🔧
         shell: 'script -q -e -c "bash {0}"'
         run: |
           source .envrc
           cos-build $FLAVOR
 
-
+  
+  
+  
   build-opensuse:
     runs-on: ubuntu-latest
     env:
@@ -50,11 +92,15 @@ jobs:
       DOWNLOAD_METADATA: false
       PUSH_CACHE: false
     steps:
+
+      
+  
       - name: Install Go
         uses: actions/setup-go@v2
 
+      
+  
       - uses: actions/checkout@v2
-
       - run: |
           git fetch --prune --unshallow
       - name: setup-docker
@@ -64,13 +110,19 @@ jobs:
           sudo rm -rf /usr/local/lib/android # will release about 10 GB if you don't need Android
           sudo rm -rf /usr/share/dotnet # will release about 20GB if you don't need .NET
 
-      - name: Install deps
+      
+  
+  
+      - name: Run make deps
         run: |
           sudo -E make deps
 
-      - name: Validate 🌳
+      
+  
+  
+      - name: Run make validate
         run: |
-          make validate
+          sudo -E make validate
 
       - name: Build packages 🔧
         run: |
@@ -82,9 +134,13 @@ jobs:
           ./.github/build
           ls -liah $PWD/build
           sudo chmod -R 777 $PWD/build
-      - name: Create repo
+      
+  
+  
+      - name: Run make create-repo
         run: |
           sudo -E make create-repo
+
       - name: Upload results
         uses: actions/upload-artifact@v2
         with:
@@ -92,13 +148,29 @@ jobs:
           path: build
           if-no-files-found: error
 
+    
+  
+  
+  
+  
   iso-squashfs-opensuse:
     runs-on: ubuntu-latest
     needs: build-opensuse
     env:
       FINAL_REPO: quay.io/costoolkit/releases-opensuse
     steps:
+      
+  
       - uses: actions/checkout@v2
+      - run: |
+          git fetch --prune --unshallow
+      - name: setup-docker
+        uses: docker-practice/actions-setup-docker@master
+      - name: Release space from worker
+        run: |
+          sudo rm -rf /usr/local/lib/android # will release about 10 GB if you don't need Android
+          sudo rm -rf /usr/share/dotnet # will release about 20GB if you don't need .NET
+
       - name: Download result for build
         uses: actions/download-artifact@v2
         with:
@@ -108,19 +180,28 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y xorriso squashfs-tools
+      
+  
+  
+      - name: Run make deps
+        run: |
           sudo -E make deps
+
+      
+      - name: Export cos version
+        run: |
+             source .github/helpers.sh
+             echo "COS_VERSION=$(cos_version)" >> $GITHUB_ENV
+
       - name: Build ISO from local build 🔧
         if: github.event_name != 'schedule' && !startsWith(github.ref, 'refs/tags/')
         run: |
           source .github/helpers.sh
           create_remote_manifest manifest.yaml
-          COS_VERSION=$(cos_version)
           sudo -E MAKEISO_ARGS="--output cOS-$COS_VERSION" MANIFEST=manifest.yaml.remote make local-iso
       - name: Build ISO from remote repositories 🔧
         if: github.event_name == 'schedule' || startsWith(github.ref, 'refs/tags/')
         run: |
-          source .github/helpers.sh
-          COS_VERSION=$(cos_version)
           sudo -E MAKEISO_ARGS="--output cOS-$COS_VERSION" make iso
       - uses: actions/upload-artifact@v2
         with:
@@ -129,6 +210,11 @@ jobs:
             *.iso
             *.sha256
           if-no-files-found: error
+
+  
+  
+  
+  
   qemu-squashfs-opensuse:
     runs-on: macos-10.15
     needs: iso-squashfs-opensuse
@@ -156,6 +242,11 @@ jobs:
           path: |
             packer/*.box
           if-no-files-found: error
+
+  
+  
+  
+  
   vbox-squashfs-opensuse:
     runs-on: macos-10.15
     needs: iso-squashfs-opensuse
@@ -185,6 +276,11 @@ jobs:
           path: |
             packer/*.box
           if-no-files-found: error
+
+  
+  
+  
+  
   tests-squashfs-opensuse:
     env:
       VAGRANT_CPU: 3
@@ -227,13 +323,29 @@ jobs:
           path: tests/serial_port1
           if-no-files-found: warn
 
+    
+  
+  
+  
+  
   iso-nonsquashfs-opensuse:
     runs-on: ubuntu-latest
     needs: build-opensuse
     env:
       FINAL_REPO: quay.io/costoolkit/releases-opensuse
     steps:
+      
+  
       - uses: actions/checkout@v2
+      - run: |
+          git fetch --prune --unshallow
+      - name: setup-docker
+        uses: docker-practice/actions-setup-docker@master
+      - name: Release space from worker
+        run: |
+          sudo rm -rf /usr/local/lib/android # will release about 10 GB if you don't need Android
+          sudo rm -rf /usr/share/dotnet # will release about 20GB if you don't need .NET
+
       - name: Download result for build
         uses: actions/download-artifact@v2
         with:
@@ -243,22 +355,31 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y xorriso squashfs-tools
+      
+  
+  
+      - name: Run make deps
+        run: |
           sudo -E make deps
+
       - name: Tweak manifest and drop squashfs recovery
         run: |
           yq d -i manifest.yaml 'packages.isoimage(.==recovery/cos-img)'
+      
+      - name: Export cos version
+        run: |
+             source .github/helpers.sh
+             echo "COS_VERSION=$(cos_version)" >> $GITHUB_ENV
+
       - name: Build ISO from local build 🔧
         if: github.event_name != 'schedule' && !startsWith(github.ref, 'refs/tags/')
         run: |
           source .github/helpers.sh
           create_remote_manifest manifest.yaml
-          COS_VERSION=$(cos_version)
           sudo -E MAKEISO_ARGS="--output cOS-$COS_VERSION" MANIFEST=manifest.yaml.remote make local-iso
       - name: Build ISO from remote repositories 🔧
         if: github.event_name == 'schedule' || startsWith(github.ref, 'refs/tags/')
         run: |
-          source .github/helpers.sh
-          COS_VERSION=$(cos_version)
           sudo -E MAKEISO_ARGS="--output cOS-$COS_VERSION" make iso
       - uses: actions/upload-artifact@v2
         with:
@@ -267,6 +388,11 @@ jobs:
             *.iso
             *.sha256
           if-no-files-found: error
+
+  
+  
+  
+  
   qemu-nonsquashfs-opensuse:
     runs-on: macos-10.15
     needs: iso-nonsquashfs-opensuse
@@ -294,6 +420,11 @@ jobs:
           path: |
             packer/*.box
           if-no-files-found: error
+
+  
+  
+  
+  
   vbox-nonsquashfs-opensuse:
     runs-on: macos-10.15
     needs: iso-nonsquashfs-opensuse
@@ -323,6 +454,11 @@ jobs:
           path: |
             packer/*.box
           if-no-files-found: error
+
+  
+  
+  
+  
   tests-nonsquashfs-opensuse:
     env:
       VAGRANT_CPU: 3
@@ -365,6 +501,9 @@ jobs:
           path: tests/serial_port1
           if-no-files-found: warn
 
+  
+  
+  
   raw-images-opensuse:
     runs-on: ubuntu-latest
     container: opensuse/leap:15.3
@@ -385,19 +524,40 @@ jobs:
           # Since some time /var/lock is a symlink to /run/lock, which doesn't exit in the continer
           rm -rf /var/lock
           mkdir -p /var/lock
-          make deps
+      
+  
+  
+      - name: Run make deps
+        run: |
+          sudo -E make deps
+
+      
       - name: Export cos version
         run: |
-          echo "COS_VERSION=$(yq r packages/cos/collection.yaml 'packages.[0].version')" >> $GITHUB_ENV
-      - name: Build raw image
+             source .github/helpers.sh
+             echo "COS_VERSION=$(cos_version)" >> $GITHUB_ENV
+
+      
+  
+  
+      - name: Run make raw_disk
         run: |
-          make raw_disk
-      - name: Build Azure image
+          sudo -E make raw_disk
+
+      
+  
+  
+      - name: Run make azure_disk
         run: |
-          make azure_disk
-      - name: Build GCE image
+          sudo -E make azure_disk
+
+      
+  
+  
+      - name: Run make gce_disk
         run: |
-          make gce_disk
+          sudo -E make gce_disk
+
       - name: Rename images
         run: |
           mv disk.raw cOS-Vanilla-RAW-${{ env.COS_VERSION }}-opensuse-${{ github.sha }}.raw
@@ -421,16 +581,21 @@ jobs:
           path: |
             cOS-Vanilla-AZURE-${{ env.COS_VERSION }}-opensuse-${{ github.sha }}.tar.gz
           if-no-files-found: error
+
+  
+
+  
+  
   
   docker-build-fedora:
     runs-on: ubuntu-latest
   
     env:
       FLAVOR: fedora
-
     steps:
+      
+  
       - uses: actions/checkout@v2
-
       - run: |
           git fetch --prune --unshallow
       - name: setup-docker
@@ -439,13 +604,16 @@ jobs:
         run: |
           sudo rm -rf /usr/local/lib/android # will release about 10 GB if you don't need Android
           sudo rm -rf /usr/share/dotnet # will release about 20GB if you don't need .NET
+
       - name: Build  🔧
         shell: 'script -q -e -c "bash {0}"'
         run: |
           source .envrc
           cos-build $FLAVOR
 
-
+  
+  
+  
   build-fedora:
     runs-on: ubuntu-latest
     env:
@@ -454,11 +622,15 @@ jobs:
       DOWNLOAD_METADATA: false
       PUSH_CACHE: false
     steps:
+
+      
+  
       - name: Install Go
         uses: actions/setup-go@v2
 
+      
+  
       - uses: actions/checkout@v2
-
       - run: |
           git fetch --prune --unshallow
       - name: setup-docker
@@ -468,13 +640,19 @@ jobs:
           sudo rm -rf /usr/local/lib/android # will release about 10 GB if you don't need Android
           sudo rm -rf /usr/share/dotnet # will release about 20GB if you don't need .NET
 
-      - name: Install deps
+      
+  
+  
+      - name: Run make deps
         run: |
           sudo -E make deps
 
-      - name: Validate 🌳
+      
+  
+  
+      - name: Run make validate
         run: |
-          make validate
+          sudo -E make validate
 
       - name: Build packages 🔧
         run: |
@@ -486,25 +664,36 @@ jobs:
           ./.github/build
           ls -liah $PWD/build
           sudo chmod -R 777 $PWD/build
-      - name: Create repo
+      
+  
+  
+      - name: Run make create-repo
         run: |
           sudo -E make create-repo
+
       - name: Upload results
         uses: actions/upload-artifact@v2
         with:
           name: build-fedora
           path: build
           if-no-files-found: error
+
+    
+    
+  
+
+  
+  
   
   docker-build-ubuntu:
     runs-on: ubuntu-latest
   
     env:
       FLAVOR: ubuntu
-
     steps:
+      
+  
       - uses: actions/checkout@v2
-
       - run: |
           git fetch --prune --unshallow
       - name: setup-docker
@@ -513,13 +702,16 @@ jobs:
         run: |
           sudo rm -rf /usr/local/lib/android # will release about 10 GB if you don't need Android
           sudo rm -rf /usr/share/dotnet # will release about 20GB if you don't need .NET
+
       - name: Build  🔧
         shell: 'script -q -e -c "bash {0}"'
         run: |
           source .envrc
           cos-build $FLAVOR
 
-
+  
+  
+  
   build-ubuntu:
     runs-on: ubuntu-latest
     env:
@@ -528,11 +720,15 @@ jobs:
       DOWNLOAD_METADATA: false
       PUSH_CACHE: false
     steps:
+
+      
+  
       - name: Install Go
         uses: actions/setup-go@v2
 
+      
+  
       - uses: actions/checkout@v2
-
       - run: |
           git fetch --prune --unshallow
       - name: setup-docker
@@ -542,13 +738,19 @@ jobs:
           sudo rm -rf /usr/local/lib/android # will release about 10 GB if you don't need Android
           sudo rm -rf /usr/share/dotnet # will release about 20GB if you don't need .NET
 
-      - name: Install deps
+      
+  
+  
+      - name: Run make deps
         run: |
           sudo -E make deps
 
-      - name: Validate 🌳
+      
+  
+  
+      - name: Run make validate
         run: |
-          make validate
+          sudo -E make validate
 
       - name: Build packages 🔧
         run: |
@@ -560,12 +762,19 @@ jobs:
           ./.github/build
           ls -liah $PWD/build
           sudo chmod -R 777 $PWD/build
-      - name: Create repo
+      
+  
+  
+      - name: Run make create-repo
         run: |
           sudo -E make create-repo
+
       - name: Upload results
         uses: actions/upload-artifact@v2
         with:
           name: build-ubuntu
           path: build
           if-no-files-found: error
+
+    
+    
