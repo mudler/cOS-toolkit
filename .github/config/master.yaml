@@ -14,3 +14,5 @@ skip_images_flavor: ["fedora","ubuntu"]
 on: 
   push: 
     branches: ["master"]
+    tags:
+      - "v*"
