@@ -10,36 +10,36 @@ concurrency:
 
 jobs:
 
-{{{ range $config.flavors }}}
+{{{- range $config.flavors }}}
   {{{$flavor:=.}}}
   docker-build-{{{ $flavor }}}:
-  {{{ if $config.local_runner }}}
+  {{{- if $config.local_runner }}}
     runs-on: self-hosted
     if: contains(["mudler", "davidcassany", "itxaka", kkaempf", "cOS-cibot"], "${{ github.actor }}") || contains(github.event.pull_request.labels.*.name, 'safe to test')
-  {{{ else }}}
+  {{{- else }}}
     runs-on: ubuntu-latest
   {{{ end }}}
     env:
       FLAVOR: {{{ $flavor }}}
 
     steps:
-  {{{ if $config.local_runner }}}
+  {{{- if $config.local_runner }}}
       - run: |
           sudo rm -rf build || true
           sudo rm -rf bin || true
-  {{{ end }}}
+  {{{- end }}}
       - uses: actions/checkout@v2
 
       - run: |
           git fetch --prune --unshallow
-  {{{ if not $config.local_runner }}}
+  {{{- if not $config.local_runner }}}
       - name: setup-docker
         uses: docker-practice/actions-setup-docker@master
       - name: Release space from worker
         run: |
           sudo rm -rf /usr/local/lib/android # will release about 10 GB if you don't need Android
           sudo rm -rf /usr/share/dotnet # will release about 20GB if you don't need .NET
-  {{{end}}}
+  {{{- end }}}
       - name: Build  🔧
         shell: 'script -q -e -c "bash {0}"'
         run: |
@@ -48,57 +48,57 @@ jobs:
 
 
   build-{{{ $flavor }}}:
-  {{{ if $config.local_runner }}}
+  {{{- if $config.local_runner }}}
     runs-on: self-hosted
     if: contains(["mudler", "davidcassany", "itxaka", kkaempf", "cOS-cibot"], "${{ github.actor }}")
-  {{{ else }}}
+  {{{- else }}}
     runs-on: ubuntu-latest
-  {{{ end }}}
+  {{{- end }}}
     env:
       FLAVOR: {{{ $flavor }}}
       FINAL_REPO: quay.io/costoolkit/{{{$config.repository}}}-{{{ $flavor }}}
       DOWNLOAD_METADATA: false
       PUSH_CACHE: {{{$config.push_cache}}}
     steps:
-  {{{ if $config.local_runner }}}
+  {{{- if $config.local_runner }}}
       - run: |
           sudo rm -rf build || true
           sudo rm -rf bin || true
-  {{{ end }}}
+  {{{- end }}}
 
-  {{{ if $config.local_runner }}}
+  {{{- if $config.local_runner }}}
       - name: Install Go
         run: |
           curl -L https://golang.org/dl/go1.16.5.linux-amd64.tar.gz -o go1.16.5.linux-amd64.tar.gz
           sudo rm -rf /usr/local/go && sudo tar -C /usr/local -xzf go1.16.5.linux-amd64.tar.gz
-  {{{ else }}}
+  {{{- else }}}
       - name: Install Go
         uses: actions/setup-go@v2
-  {{{ end }}}
+  {{{- end }}}
 
       - uses: actions/checkout@v2
 
       - run: |
           git fetch --prune --unshallow
 
-  {{{ if $config.local_runner }}}
+  {{{- if $config.local_runner }}}
       - name: Install make
         run: |
             sudo apt-get update
             sudo apt-get install -y make
-  {{{ else }}}
+  {{{- else }}}
       - name: setup-docker
         uses: docker-practice/actions-setup-docker@master
       - name: Release space from worker
         run: |
           sudo rm -rf /usr/local/lib/android # will release about 10 GB if you don't need Android
           sudo rm -rf /usr/share/dotnet # will release about 20GB if you don't need .NET
-  {{{ end }}}
+  {{{- end }}}
 
-  {{{ if or $config.publishing_pipeline $config.push_cache }}}
+  {{{- if or $config.publishing_pipeline $config.push_cache }}}
       - name: Login to Quay Registry
         run: echo ${{ secrets.QUAY_PASSWORD }} | docker login -u ${{ secrets.QUAY_USERNAME }} --password-stdin quay.io
-  {{{ end }}}
+  {{{- end }}}
 
       - name: Install deps
         run: |
@@ -118,7 +118,7 @@ jobs:
           ./.github/build
           ls -liah $PWD/build
           sudo chmod -R 777 $PWD/build
-  {{{ if $config.publishing_pipeline }}}
+  {{{- if $config.publishing_pipeline }}}
       - name: Generate manifests
         run: |
           for f in build/*tar*; do
@@ -132,7 +132,7 @@ jobs:
             BASE_NAME=`basename -s .package.tar.zst.mtree $f`
             sudo -E .github/append_manifests.py build/$BASE_NAME.metadata.yaml $f mtree
           done
-  {{{ end }}}
+  {{{- end }}}
       - name: Create repo
         run: |
           sudo -E make create-repo
@@ -145,17 +145,17 @@ jobs:
 
 
 
-  {{{ range slice "squashfs" "nonsquashfs" }}}
-  {{{$subset:=.}}}
-  {{{ if not (has $config.skip_images_flavor $flavor) }}}
+  {{{- range slice "squashfs" "nonsquashfs" }}}
+  {{{- $subset:=.}}}
+  {{{- if not (has $config.skip_images_flavor $flavor) }}}
 
   iso-{{{$subset}}}-{{{ $flavor }}}:
-  {{{ if $config.local_runner }}}
+  {{{- if $config.local_runner }}}
     runs-on: self-hosted
     if: contains(["mudler", "davidcassany", "itxaka", kkaempf", "cOS-cibot"], "${{ github.actor }}") || contains(github.event.pull_request.labels.*.name, 'safe to test')
-  {{{ else }}}
+  {{{- else }}}
     runs-on: ubuntu-latest
-  {{{ end }}}
+  {{{- end }}}
     needs: build-{{{ $flavor }}}
     env:
       FINAL_REPO: quay.io/costoolkit/{{{$config.repository}}}-{{{ $flavor }}}
@@ -171,11 +171,11 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y xorriso squashfs-tools
           sudo -E make deps
-  {{{ if eq $subset "nonsquashfs" }}}
+  {{{- if eq $subset "nonsquashfs" }}}
       - name: Tweak manifest and drop squashfs recovery
         run: |
           yq d -i manifest.yaml 'packages.isoimage(.==recovery/cos-img)'
-  {{{ end }}}
+  {{{- end }}}
       - name: Build ISO from local build 🔧
         if: github.event_name != 'schedule' && !startsWith(github.ref, 'refs/tags/')
         run: |
@@ -252,8 +252,8 @@ jobs:
           path: |
             packer/*.box
           if-no-files-found: error
-  {{{ end }}}
-  {{{ if not (or $config.skip_tests (has $config.skip_tests_flavor $flavor)) }}}
+  {{{- end }}}
+  {{{- if not (or $config.skip_tests (has $config.skip_tests_flavor $flavor)) }}}
   tests-{{{$subset}}}-{{{ $flavor }}}:
     env:
       VAGRANT_CPU: 3
@@ -296,17 +296,17 @@ jobs:
           path: tests/serial_port1
           if-no-files-found: warn
 
-  {{{end}}}
- {{{end}}}
+  {{{- end}}}
+ {{{- end}}}
 
-  {{{ if $config.publishing_pipeline }}}
+  {{{- if $config.publishing_pipeline }}}
   publish-{{{ $flavor }}}:
     runs-on: ubuntu-latest
-    {{{ if or $config.skip_tests (has $config.skip_tests_flavor $flavor) }}}
+    {{{- if or $config.skip_tests (has $config.skip_tests_flavor $flavor) }}}
     needs: build-{{{ $flavor }}}
-    {{{ else }}}
+    {{{- else }}}
     needs: tests-squashfs-{{{ $flavor }}}
-    {{{ end }}}
+    {{{- end }}}
     env:
       FLAVOR: {{{ $flavor }}}
       FINAL_REPO: quay.io/costoolkit/{{{$config.repository}}}-{{{ $flavor }}}
@@ -335,23 +335,23 @@ jobs:
           sudo mv "/tmp/docker.json.tmp" "${DOCKER_DAEMON_JSON}"
           sudo systemctl restart docker
 
-    {{{ if or $config.publishing_pipeline $config.push_cache }}}
+    {{{- if or $config.publishing_pipeline $config.push_cache }}}
       - name: Login to Quay Registry
         run: echo ${{ secrets.QUAY_PASSWORD }} | docker login -u ${{ secrets.QUAY_USERNAME }} --password-stdin quay.io
-    {{{ end }}}
+    {{{- end }}}
 
       - name: Install deps
         run: |
           sudo -E make deps
-    {{{ if $config.local_runner }}}
+    {{{- if $config.local_runner }}}
       - name: Install Go
         run: |
           curl -L https://golang.org/dl/go1.16.5.linux-amd64.tar.gz -o go1.16.5.linux-amd64.tar.gz
           sudo rm -rf /usr/local/go && sudo tar -C /usr/local -xzf go1.16.5.linux-amd64.tar.gz
-    {{{ else }}}
+    {{{- else }}}
       - name: Install Go
         uses: actions/setup-go@v2
-    {{{ end }}}
+    {{{- end }}}
       - name: Grab metadata from remotes
         run: |
           export PATH=$PATH:/usr/local/go/bin
@@ -367,11 +367,11 @@ jobs:
   github-release-{{{ $flavor }}}:
     if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
-    {{{ if or $config.skip_tests (has $config.skip_tests_flavor $flavor) }}}
+    {{{- if or $config.skip_tests (has $config.skip_tests_flavor $flavor) }}}
     needs: build-{{{ $flavor }}}
-    {{{ else }}}
+    {{{- else }}}
     needs: tests-squashfs-{{{ $flavor }}}
-    {{{ end }}}
+    {{{- end }}}
     steps:
       - uses: actions/checkout@v2
       - name: Export cos version
@@ -419,9 +419,9 @@ jobs:
         env:
           GHR_PATH: release/
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-  {{{ end }}}
+  {{{- end }}}
 
-  {{{ if not (has $config.skip_images_flavor $flavor) }}}
+  {{{- if not (has $config.skip_images_flavor $flavor) }}}
 
   raw-images-{{{ $flavor }}}:
     runs-on: ubuntu-latest
@@ -480,7 +480,7 @@ jobs:
             cOS-Vanilla-AZURE-${{ env.COS_VERSION }}-{{{ $flavor }}}-${{ github.sha }}.tar.gz
           if-no-files-found: error
 
-    {{{ if $config.publishing_pipeline }}}
+    {{{- if $config.publishing_pipeline }}}
 
   ami-publish-{{{ $flavor }}}:
     runs-on: ubuntu-latest
@@ -503,11 +503,11 @@ jobs:
             export PKR_VAR_flavor={{{ $flavor }}}
             export PKR_VAR_git_sha="${GITHUB_SHA}"
             make packer-aws
-    {{{ end }}}
-  {{{ end }}}
-{{{ end }}}
+    {{{- end }}}
+  {{{- end }}}
+{{{- end }}}
 
-{{{ if eq $config.pipeline "master" }}}
+{{{- if eq $config.pipeline "master" }}}
   # We need only a single vanilla image for any OS
   # Vanilla image is always based on openSUSE
   publish-vanilla-ami:
@@ -538,4 +538,4 @@ jobs:
           export github_sha="${GITHUB_SHA}"
           export COPY_AMI_ALL_REGIONS="true"
           make aws_vanilla_ami
-{{{ end }}}
+{{{- end }}}
