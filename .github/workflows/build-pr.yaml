@@ -229,6 +229,9 @@ jobs:
       - name: Install deps
         run: |
           brew install qemu
+      - name: Install deps
+        run: |
+            brew install yq@3
       
       - name: Export cos version
         run: |
@@ -269,6 +272,9 @@ jobs:
       #   run: |
       #     brew tap hashicorp/tap
       #     brew install hashicorp/tap/packer
+      - name: Install deps
+        run: |
+            brew install yq@3
       
       - name: Export cos version
         run: |
@@ -421,6 +427,9 @@ jobs:
       - name: Install deps
         run: |
           brew install qemu
+      - name: Install deps
+        run: |
+            brew install yq@3
       
       - name: Export cos version
         run: |
@@ -461,6 +470,9 @@ jobs:
       #   run: |
       #     brew tap hashicorp/tap
       #     brew install hashicorp/tap/packer
+      - name: Install deps
+        run: |
+            brew install yq@3
       
       - name: Export cos version
         run: |

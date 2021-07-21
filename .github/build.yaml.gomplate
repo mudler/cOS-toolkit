@@ -213,6 +213,9 @@
       - name: Install deps
         run: |
           brew install qemu
+      - name: Install deps
+        run: |
+            brew install yq@3
       {{{ tmpl.Exec "cos_version" }}}
       - name: Build QEMU Image 🔧
         run: |
@@ -249,6 +252,9 @@
       #   run: |
       #     brew tap hashicorp/tap
       #     brew install hashicorp/tap/packer
+      - name: Install deps
+        run: |
+            brew install yq@3
       {{{ tmpl.Exec "cos_version" }}}
       - name: Build VBox Image 🔧
         run: |
