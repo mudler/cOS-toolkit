@@ -3,23 +3,21 @@
 
 local_runner: false
 push_cache: true
-skip_build: false
-
 pipeline: "master"
 publishing_pipeline: true
-publish_cloud: true
-
-repository: "releases"
-cache_repository: "build"
-organization: "quay.io/costoolkit"
-skip_tests: false
-flavors: ["opensuse", "fedora", "ubuntu"]
+skip_build: false
+repository: "cos-tests"
+publish_cloud: false
+cache_repository: "cos-tests-build"
+organization: "quay.io/mudler"
+skip_tests: true
+flavors: ["opensuse"]
 skip_tests_flavor: ["fedora","ubuntu"]
 skip_images_flavor: ["fedora","ubuntu"]
 release_flavor: ["opensuse"]
 
 on: 
   push: 
-    branches: ["master"]
+    branches: ["release_pipeline"]
     tags:
       - "v*"
