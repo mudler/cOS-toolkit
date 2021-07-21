@@ -34,6 +34,10 @@
 
 
 
+
+
+
+
 name: Build cOS master
 
 on: 
@@ -50,13 +54,15 @@ concurrency:
 
 jobs:
   
-
   
   
   
   docker-build-opensuse:
+    
+  
     runs-on: ubuntu-latest
   
+
     env:
       FLAVOR: opensuse
     steps:
@@ -82,7 +88,11 @@ jobs:
   
   
   build-opensuse:
+    
+  
     runs-on: ubuntu-latest
+  
+
     env:
       FLAVOR: opensuse
       FINAL_REPO: quay.io/mudler/cos-tests-opensuse
@@ -167,7 +177,11 @@ jobs:
   
   
   iso-squashfs-opensuse:
+    
+  
     runs-on: ubuntu-latest
+  
+
     needs: build-opensuse
     env:
       FINAL_REPO: quay.io/mudler/cos-tests-opensuse
@@ -216,7 +230,7 @@ jobs:
       - name: Build ISO from remote repositories 🔧
         if: github.event_name == 'schedule' || startsWith(github.ref, 'refs/tags/')
         run: |
-          sudo -E MAKEISO_ARGS="--output cOS-opensuse-${{ env.COS_VERSION }}" make iso
+          sudo -E YQ=/usr/bin/yq MAKEISO_ARGS="--output cOS-opensuse-${{ env.COS_VERSION }}" make iso
       - uses: actions/upload-artifact@v2
         with:
           name: cOS-squashfs-opensuse.iso.zip
@@ -241,18 +255,14 @@ jobs:
       - name: Install deps
         run: |
           brew install qemu
-      - name: Install deps
-        run: |
-            brew install yq@3
-      
-      - name: Export cos version
-        run: |
-             source .github/helpers.sh
-             echo "COS_VERSION=$(cos_version)" >> $GITHUB_ENV
-
+          brew install yq@3
       - name: Build QEMU Image 🔧
         run: |
-          PACKER_ARGS="-var='accelerator=hvf' -var='build=${{ env.COS_VERSION }}' -var='arch=amd64' -var='flavor=opensuse' -var='feature=vagrant' -only qemu.cos" make packer
+          echo 'export PATH="/usr/local/opt/yq@3/bin:$PATH"' >> /Users/runner/.bash_profile
+          export YQ=yq
+          source .github/helpers.sh
+          COS_VERSION=$(cos_version)
+          PACKER_ARGS="-var='accelerator=hvf' -var='build=$COS_VERSION' -var='arch=amd64' -var='flavor=opensuse' -var='feature=vagrant' -only qemu.cos" make packer
       - uses: actions/upload-artifact@v2
         with:
           name: cOS-squashfs-opensuse.qcow
@@ -287,15 +297,13 @@ jobs:
       - name: Install deps
         run: |
             brew install yq@3
-      
-      - name: Export cos version
-        run: |
-             source .github/helpers.sh
-             echo "COS_VERSION=$(cos_version)" >> $GITHUB_ENV
-
       - name: Build VBox Image 🔧
         run: |
-          PACKER_ARGS="-var='feature=vagrant' -var='build=${{ env.COS_VERSION }}' -var='arch=amd64' -var='flavor=opensuse' -only virtualbox-iso.cos" make packer
+          echo 'export PATH="/usr/local/opt/yq@3/bin:$PATH"' >> /Users/runner/.bash_profile
+          export YQ=yq
+          source .github/helpers.sh
+          COS_VERSION=$(cos_version)
+          PACKER_ARGS="-var='feature=vagrant' -var='build=$COS_VERSION' -var='arch=amd64' -var='flavor=opensuse' -only virtualbox-iso.cos" make packer
       - uses: actions/upload-artifact@v2
         with:
           name: cOS-squashfs-opensuse.ova
@@ -315,7 +323,11 @@ jobs:
   
   
   iso-nonsquashfs-opensuse:
+    
+  
     runs-on: ubuntu-latest
+  
+
     needs: build-opensuse
     env:
       FINAL_REPO: quay.io/mudler/cos-tests-opensuse
@@ -368,7 +380,7 @@ jobs:
       - name: Build ISO from remote repositories 🔧
         if: github.event_name == 'schedule' || startsWith(github.ref, 'refs/tags/')
         run: |
-          sudo -E MAKEISO_ARGS="--output cOS-opensuse-${{ env.COS_VERSION }}" make iso
+          sudo -E YQ=/usr/bin/yq MAKEISO_ARGS="--output cOS-opensuse-${{ env.COS_VERSION }}" make iso
       - uses: actions/upload-artifact@v2
         with:
           name: cOS-nonsquashfs-opensuse.iso.zip
@@ -393,18 +405,14 @@ jobs:
       - name: Install deps
         run: |
           brew install qemu
-      - name: Install deps
-        run: |
-            brew install yq@3
-      
-      - name: Export cos version
-        run: |
-             source .github/helpers.sh
-             echo "COS_VERSION=$(cos_version)" >> $GITHUB_ENV
-
+          brew install yq@3
       - name: Build QEMU Image 🔧
         run: |
-          PACKER_ARGS="-var='accelerator=hvf' -var='build=${{ env.COS_VERSION }}' -var='arch=amd64' -var='flavor=opensuse' -var='feature=vagrant' -only qemu.cos" make packer
+          echo 'export PATH="/usr/local/opt/yq@3/bin:$PATH"' >> /Users/runner/.bash_profile
+          export YQ=yq
+          source .github/helpers.sh
+          COS_VERSION=$(cos_version)
+          PACKER_ARGS="-var='accelerator=hvf' -var='build=$COS_VERSION' -var='arch=amd64' -var='flavor=opensuse' -var='feature=vagrant' -only qemu.cos" make packer
       - uses: actions/upload-artifact@v2
         with:
           name: cOS-nonsquashfs-opensuse.qcow
@@ -439,15 +447,13 @@ jobs:
       - name: Install deps
         run: |
             brew install yq@3
-      
-      - name: Export cos version
-        run: |
-             source .github/helpers.sh
-             echo "COS_VERSION=$(cos_version)" >> $GITHUB_ENV
-
       - name: Build VBox Image 🔧
         run: |
-          PACKER_ARGS="-var='feature=vagrant' -var='build=${{ env.COS_VERSION }}' -var='arch=amd64' -var='flavor=opensuse' -only virtualbox-iso.cos" make packer
+          echo 'export PATH="/usr/local/opt/yq@3/bin:$PATH"' >> /Users/runner/.bash_profile
+          export YQ=yq
+          source .github/helpers.sh
+          COS_VERSION=$(cos_version)
+          PACKER_ARGS="-var='feature=vagrant' -var='build=$COS_VERSION' -var='arch=amd64' -var='flavor=opensuse' -only virtualbox-iso.cos" make packer
       - uses: actions/upload-artifact@v2
         with:
           name: cOS-nonsquashfs-opensuse.ova
@@ -464,9 +470,37 @@ jobs:
   
   
   
+  image-link-opensuse:
+    runs-on: ubuntu-latest
+    needs: publish-opensuse
+    steps:
+      - uses: actions/checkout@v2
+      
+  
+  
+      - name: Run make deps
+        run: |
+          sudo -E make deps
+          sudo luet install -y toolchain/yq
+
+      - name: Generate link for opensuse
+        run: |
+            source .github/helpers.sh
+            PACKAGE_VERSION=$(cos_package_version)
+            export COS_VERSION="${PACKAGE_VERSION/+/-}"
+            echo "quay.io/mudler/cos-tests-opensuse:cos-system-${COS_VERSION}" > images-opensuse.txt
+      - uses: actions/upload-artifact@v2
+        with:
+          name: images-opensuse.txt
+          path: |
+            images-opensuse.txt
+
+  
+  
+  
   publish-opensuse:
     runs-on: ubuntu-latest
-    needs: 
+    needs:
     - build-opensuse
     - iso-squashfs-opensuse
     env:
@@ -523,14 +557,23 @@ jobs:
   github-release-opensuse:
     if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
-    needs: 
+    needs:
     - build-opensuse
     - raw-images-opensuse
     - vbox-nonsquashfs-opensuse
     - qemu-nonsquashfs-opensuse
     - iso-nonsquashfs-opensuse
+    - image-link-opensuse
     steps:
       - uses: actions/checkout@v2
+      
+  
+  
+      - name: Run make deps
+        run: |
+          sudo -E make deps
+          sudo luet install -y toolchain/yq
+
       
       - name: Export cos version
         run: |
@@ -572,6 +615,19 @@ jobs:
         with:
           name: cOS-Vanilla-RAW-opensuse-${{ env.COS_VERSION }}
           path: release
+      - name: Download Image links
+        uses: actions/download-artifact@v2
+        with:
+          name: images-opensuse.txt
+          path: release
+      - name: Compress artifacts
+        run: |
+            vhda=$(ls release/*.vhda)
+            tar -cJf ${vhda}.tar.xz $vhda
+            rm -rf $vhda
+            raw=$(ls release/*.raw)
+            tar -cJf ${raw}.tar.xz $raw
+            rm -rf $raw
       - name: Release
         uses: fnkr/github-action-ghr@v1
         if: startsWith(github.ref, 'refs/tags/')
@@ -585,7 +641,8 @@ jobs:
   raw-images-opensuse:
     runs-on: ubuntu-latest
     container: opensuse/leap:15.3
-    needs: build-opensuse
+    needs:
+    - build-opensuse
 
     steps:
       - name: Install OS deps
@@ -639,25 +696,25 @@ jobs:
 
       - name: Rename images
         run: |
-          mv disk.raw cOS-Vanilla-RAW-opensuse-${{ env.COS_VERSION }}-g${{ github.sha }}.raw
-          mv disk.vhd cOS-Vanilla-AZURE-opensuse-${{ env.COS_VERSION }}-g${{ github.sha }}.vhd
-          mv disk.raw.tar.gz cOS-Vanilla-AZURE-opensuse-${{ env.COS_VERSION }}-g${{ github.sha }}.tar.gz
+          mv disk.raw cOS-Vanilla-RAW-opensuse-${{ env.COS_VERSION }}.raw
+          mv disk.vhd cOS-Vanilla-AZURE-opensuse-${{ env.COS_VERSION }}.vhd
+          mv disk.raw.tar.gz cOS-Vanilla-AZURE-opensuse-${{ env.COS_VERSION }}.tar.gz
       - uses: actions/upload-artifact@v2
         with:
-          name: cOS-Vanilla-RAW-opensuse-${{ env.COS_VERSION }}-g${{ github.sha }}
+          name: cOS-Vanilla-RAW-opensuse-${{ env.COS_VERSION }}
           path: |
-            cOS-Vanilla-RAW-opensuse-${{ env.COS_VERSION }}-g${{ github.sha }}.raw
+            cOS-Vanilla-RAW-opensuse-${{ env.COS_VERSION }}.raw
           if-no-files-found: error
       - uses: actions/upload-artifact@v2
         with:
-          name: cOS-Vanilla-AZURE-opensuse-${{ env.COS_VERSION }}-g${{ github.sha }}
+          name: cOS-Vanilla-AZURE-opensuse-${{ env.COS_VERSION }}
           path: |
-            cOS-Vanilla-AZURE-opensuse-${{ env.COS_VERSION }}-g${{ github.sha }}.vhd
+            cOS-Vanilla-AZURE-opensuse-${{ env.COS_VERSION }}.vhd
           if-no-files-found: error
       - uses: actions/upload-artifact@v2
         with:
-          name: cOS-Vanilla-GCE-opensuse-${{ env.COS_VERSION }}-g${{ github.sha }}
+          name: cOS-Vanilla-GCE-opensuse-${{ env.COS_VERSION }}
           path: |
-            cOS-Vanilla-AZURE-opensuse-${{ env.COS_VERSION }}-g${{ github.sha }}.tar.gz
+            cOS-Vanilla-AZURE-opensuse-${{ env.COS_VERSION }}.tar.gz
           if-no-files-found: error
 
