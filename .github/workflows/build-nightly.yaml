@@ -34,6 +34,10 @@
 
 
 
+
+
+
+
 name: Build cOS nightly
 
 on: 
@@ -52,8 +56,11 @@ jobs:
   
   
   docker-build-opensuse:
+    
+  
     runs-on: ubuntu-latest
   
+
     env:
       FLAVOR: opensuse
     steps:
@@ -79,7 +86,11 @@ jobs:
   
   
   build-opensuse:
+    
+  
     runs-on: ubuntu-latest
+  
+
     env:
       FLAVOR: opensuse
       FINAL_REPO: quay.io/costoolkit/releases-opensuse
@@ -149,7 +160,11 @@ jobs:
   
   
   iso-squashfs-opensuse:
+    
+  
     runs-on: ubuntu-latest
+  
+
     needs: build-opensuse
     env:
       FINAL_REPO: quay.io/costoolkit/releases-opensuse
@@ -343,7 +358,11 @@ jobs:
   
   
   iso-nonsquashfs-opensuse:
+    
+  
     runs-on: ubuntu-latest
+  
+
     needs: build-opensuse
     env:
       FINAL_REPO: quay.io/costoolkit/releases-opensuse
@@ -595,26 +614,26 @@ jobs:
 
       - name: Rename images
         run: |
-          mv disk.raw cOS-Vanilla-RAW-opensuse-${{ env.COS_VERSION }}-g${{ github.sha }}.raw
-          mv disk.vhd cOS-Vanilla-AZURE-opensuse-${{ env.COS_VERSION }}-g${{ github.sha }}.vhd
-          mv disk.raw.tar.gz cOS-Vanilla-AZURE-opensuse-${{ env.COS_VERSION }}-g${{ github.sha }}.tar.gz
+          mv disk.raw cOS-Vanilla-RAW-opensuse-${{ env.COS_VERSION }}.raw
+          mv disk.vhd cOS-Vanilla-AZURE-opensuse-${{ env.COS_VERSION }}.vhd
+          mv disk.raw.tar.gz cOS-Vanilla-AZURE-opensuse-${{ env.COS_VERSION }}.tar.gz
       - uses: actions/upload-artifact@v2
         with:
-          name: cOS-Vanilla-RAW-opensuse-${{ env.COS_VERSION }}-g${{ github.sha }}
+          name: cOS-Vanilla-RAW-opensuse-${{ env.COS_VERSION }}
           path: |
-            cOS-Vanilla-RAW-opensuse-${{ env.COS_VERSION }}-g${{ github.sha }}.raw
+            cOS-Vanilla-RAW-opensuse-${{ env.COS_VERSION }}.raw
           if-no-files-found: error
       - uses: actions/upload-artifact@v2
         with:
-          name: cOS-Vanilla-AZURE-opensuse-${{ env.COS_VERSION }}-g${{ github.sha }}
+          name: cOS-Vanilla-AZURE-opensuse-${{ env.COS_VERSION }}
           path: |
-            cOS-Vanilla-AZURE-opensuse-${{ env.COS_VERSION }}-g${{ github.sha }}.vhd
+            cOS-Vanilla-AZURE-opensuse-${{ env.COS_VERSION }}.vhd
           if-no-files-found: error
       - uses: actions/upload-artifact@v2
         with:
-          name: cOS-Vanilla-GCE-opensuse-${{ env.COS_VERSION }}-g${{ github.sha }}
+          name: cOS-Vanilla-GCE-opensuse-${{ env.COS_VERSION }}
           path: |
-            cOS-Vanilla-AZURE-opensuse-${{ env.COS_VERSION }}-g${{ github.sha }}.tar.gz
+            cOS-Vanilla-AZURE-opensuse-${{ env.COS_VERSION }}.tar.gz
           if-no-files-found: error
 
   
@@ -623,8 +642,11 @@ jobs:
   
   
   docker-build-fedora:
+    
+  
     runs-on: ubuntu-latest
   
+
     env:
       FLAVOR: fedora
     steps:
@@ -650,7 +672,11 @@ jobs:
   
   
   build-fedora:
+    
+  
     runs-on: ubuntu-latest
+  
+
     env:
       FLAVOR: fedora
       FINAL_REPO: quay.io/costoolkit/releases-fedora
@@ -722,8 +748,11 @@ jobs:
   
   
   docker-build-ubuntu:
+    
+  
     runs-on: ubuntu-latest
   
+
     env:
       FLAVOR: ubuntu
     steps:
@@ -749,7 +778,11 @@ jobs:
   
   
   build-ubuntu:
+    
+  
     runs-on: ubuntu-latest
+  
+
     env:
       FLAVOR: ubuntu
       FINAL_REPO: quay.io/costoolkit/releases-ubuntu

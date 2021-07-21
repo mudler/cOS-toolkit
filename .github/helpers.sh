@@ -1,8 +1,12 @@
 #!/bin/bash
 
+cos_package_version() {
+    echo $(/usr/bin/yq r packages/cos/collection.yaml 'packages.[0].version')
+}
+
 cos_version() {
     SHA=$(echo $GITHUB_SHA | cut -c1-8 )
-    echo $(/usr/bin/yq r packages/cos/collection.yaml 'packages.[0].version')-g$SHA
+    echo $(cos_package_version)-g$SHA
 }
 
 create_remote_manifest() {
